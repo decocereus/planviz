@@ -22,7 +22,10 @@
 - [x] Phase 4 — File Watch & Sync (completed 2026-01-18)
   - [x] t16: Add file watcher on plan.md and plan.layout.json emitting Tauri events
   - [x] t17: Handle external changes with auto-reload by default; configurable setting to prompt instead; show conflict banner
-- [ ] Phase 5 — Chat Panel (Mock → Real)
+- [x] Phase 5 — Chat Panel (Mock → Real) (completed 2026-01-18)
+  - [x] t18: Build chat panel UI with message history, input, and streaming view
+  - [x] t19: Implement mock ACP client in Rust with canned stream events
+  - [x] t20: Wire plan update events from agent to plan.md and canvas refresh
 - [ ] Phase 6 — Agent Integration (Claude-first, then Codex/OpenCode)
 - [ ] Phase 7 — Agent Selector & Launch Modes
 - [ ] Phase 8 — Terminal Session Bridging

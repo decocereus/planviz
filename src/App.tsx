@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from 'react';
-import { FileText, FolderOpen, X } from 'lucide-react';
+import { FileText, FolderOpen, X, MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 
 import { Button } from './components/ui/button';
 import { QuickActions } from './components/QuickActions';
 import { ConflictBanner } from './components/ConflictBanner';
+import { ChatPanel } from './components/chat';
 import { PlanCanvas } from './canvas';
 import { usePlanStore } from './store';
 import { parsePlan } from './parser';
@@ -100,11 +101,15 @@ function CanvasHeader({
   onClose,
   isDirty,
   isSaving,
+  isChatOpen,
+  onToggleChat,
 }: {
   planPath: string | null;
   onClose: () => void;
   isDirty: boolean;
   isSaving: boolean;
+  isChatOpen: boolean;
+  onToggleChat: () => void;
 }) {
   const fileName = planPath ? planPath.split('/').pop() : 'Demo Plan';
 
@@ -120,9 +125,18 @@ function CanvasHeader({
           <span className="text-xs text-muted-foreground">Saving...</span>
         )}
       </div>
-      <Button variant="ghost" size="sm" onClick={onClose}>
-        <X className="h-4 w-4" />
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="sm" onClick={onToggleChat} title={isChatOpen ? 'Hide chat' : 'Show chat'}>
+          {isChatOpen ? (
+            <PanelRightClose className="h-4 w-4" />
+          ) : (
+            <PanelRightOpen className="h-4 w-4" />
+          )}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -153,6 +167,7 @@ export default function App() {
   } = usePlanStore();
 
   const [isCanvasView, setIsCanvasView] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(true);
 
   // Handle external file changes
   const handleExternalPlanChange = useCallback(
@@ -270,29 +285,43 @@ export default function App() {
 
   return (
     <main className="h-screen flex flex-col bg-background">
-      <CanvasHeader planPath={planPath} onClose={handleClose} isDirty={isDirty} isSaving={isSaving} />
-      <div className="flex-1 relative">
-        {hasExternalChanges && externalChangeType && (
-          <ConflictBanner
-            changeType={externalChangeType}
-            onReload={handleReloadFromBanner}
-            onDismiss={dismissExternalChanges}
+      <CanvasHeader
+        planPath={planPath}
+        onClose={handleClose}
+        isDirty={isDirty}
+        isSaving={isSaving}
+        isChatOpen={isChatOpen}
+        onToggleChat={() => setIsChatOpen(!isChatOpen)}
+      />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Canvas area */}
+        <div className="flex-1 relative">
+          {hasExternalChanges && externalChangeType && (
+            <ConflictBanner
+              changeType={externalChangeType}
+              onReload={handleReloadFromBanner}
+              onDismiss={dismissExternalChanges}
+            />
+          )}
+          <PlanCanvas
+            plan={plan}
+            layouts={layouts}
+            onLayoutChange={handleLayoutChange}
+            onNodeSelect={setSelectedNode}
           />
+          <QuickActions
+            selectedNodeId={selectedNodeId}
+            nodeType={selectedNode?.type ?? null}
+            currentStatus={selectedNode?.status ?? null}
+            onStatusChange={handleStatusChange}
+            onDelete={handleDelete}
+            onAddTask={handleAddTask}
+          />
+        </div>
+        {/* Chat panel */}
+        {isChatOpen && (
+          <ChatPanel className="w-96 flex-shrink-0" />
         )}
-        <PlanCanvas
-          plan={plan}
-          layouts={layouts}
-          onLayoutChange={handleLayoutChange}
-          onNodeSelect={setSelectedNode}
-        />
-        <QuickActions
-          selectedNodeId={selectedNodeId}
-          nodeType={selectedNode?.type ?? null}
-          currentStatus={selectedNode?.status ?? null}
-          onStatusChange={handleStatusChange}
-          onDelete={handleDelete}
-          onAddTask={handleAddTask}
-        />
       </div>
     </main>
   );

@@ -61,3 +61,35 @@ export interface LayoutFile {
   layouts: LayoutMap;
   lastModified: string; // ISO timestamp
 }
+
+/** Chat message role */
+export type ChatRole = 'user' | 'assistant' | 'system';
+
+/** A chat message */
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  timestamp: number;
+  isStreaming?: boolean;
+}
+
+/** Stream event types from ACP */
+export type StreamEventType =
+  | 'message_start'
+  | 'content_block_start'
+  | 'content_block_delta'
+  | 'content_block_stop'
+  | 'message_stop'
+  | 'plan_update';
+
+/** Stream event payload */
+export interface StreamEvent {
+  type: StreamEventType;
+  content?: string;
+  planUpdate?: {
+    nodeId: string;
+    status?: Status;
+    content?: string;
+  };
+}

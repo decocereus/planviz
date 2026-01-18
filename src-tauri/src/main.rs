@@ -2,6 +2,7 @@
 
 use std::sync::Mutex;
 
+mod chat;
 mod history;
 mod layout;
 mod watcher;
@@ -23,6 +24,7 @@ fn main() {
             watcher::start_watching,
             watcher::stop_watching,
             watcher::get_watched_plan,
+            chat::send_chat_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
