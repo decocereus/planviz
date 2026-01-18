@@ -95,9 +95,13 @@ function WelcomeScreen({ onOpenPlan, onDemoMode }: { onOpenPlan: () => void; onD
 function CanvasHeader({
   planPath,
   onClose,
+  isDirty,
+  isSaving,
 }: {
   planPath: string | null;
   onClose: () => void;
+  isDirty: boolean;
+  isSaving: boolean;
 }) {
   const fileName = planPath ? planPath.split('/').pop() : 'Demo Plan';
 
@@ -106,6 +110,12 @@ function CanvasHeader({
       <div className="flex items-center gap-2">
         <FileText className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">{fileName}</span>
+        {isDirty && !isSaving && (
+          <span className="text-xs text-muted-foreground">(unsaved)</span>
+        )}
+        {isSaving && (
+          <span className="text-xs text-muted-foreground">Saving...</span>
+        )}
       </div>
       <Button variant="ghost" size="sm" onClick={onClose}>
         <X className="h-4 w-4" />
@@ -120,11 +130,14 @@ export default function App() {
     planPath,
     layouts,
     setLayouts,
+    updateLayoutsAndSave,
     setPlan,
     clearPlan,
     mergeLayout,
     selectedNodeId,
     setSelectedNode,
+    isDirty,
+    isSaving,
   } = usePlanStore();
 
   const [isCanvasView, setIsCanvasView] = useState(false);
@@ -167,10 +180,9 @@ export default function App() {
 
   const handleLayoutChange = useCallback(
     (newLayouts: LayoutMap) => {
-      setLayouts(newLayouts);
-      // TODO: Debounce and save to file in t13
+      updateLayoutsAndSave(newLayouts);
     },
-    [setLayouts]
+    [updateLayoutsAndSave]
   );
 
   if (!isCanvasView) {
@@ -183,7 +195,7 @@ export default function App() {
 
   return (
     <main className="h-screen flex flex-col bg-background">
-      <CanvasHeader planPath={planPath} onClose={handleClose} />
+      <CanvasHeader planPath={planPath} onClose={handleClose} isDirty={isDirty} isSaving={isSaving} />
       <div className="flex-1 relative">
         <PlanCanvas
           plan={plan}

@@ -5,6 +5,10 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { PlanDoc, LayoutMap, LayoutFile, PlanNode } from '../types';
+import { debounce } from '../lib/utils';
+
+/** Debounce delay for auto-save (ms) */
+const AUTOSAVE_DELAY = 1000;
 
 interface MergeResult {
   layout: LayoutFile;
@@ -28,11 +32,14 @@ interface PlanState {
   // UI state
   selectedNodeId: string | null;
   isLoading: boolean;
+  isSaving: boolean;
+  isDirty: boolean;
   error: string | null;
 
   // Actions
   setPlan: (plan: PlanDoc, planPath: string, planHash: string) => void;
   setLayouts: (layouts: LayoutMap) => void;
+  updateLayoutsAndSave: (layouts: LayoutMap) => void;
   setSelectedNode: (nodeId: string | null) => void;
   clearPlan: () => void;
 
@@ -51,39 +58,83 @@ function toNodeInfo(node: PlanNode): NodeInfo {
   };
 }
 
-export const usePlanStore = create<PlanState>((set, get) => ({
-  // Initial state
-  planPath: null,
-  plan: null,
-  layouts: {},
-  planHash: '',
-  selectedNodeId: null,
-  isLoading: false,
-  error: null,
+/** Debounced save function (created once per store instance) */
+let debouncedSave: (() => void) | null = null;
 
-  // Synchronous actions
-  setPlan: (plan, planPath, planHash) => {
-    set({ plan, planPath, planHash, error: null });
-  },
+export const usePlanStore = create<PlanState>((set, get) => {
+  // Create debounced save function
+  const performSave = async () => {
+    const { planPath, layouts, planHash } = get();
+    if (!planPath) return;
 
-  setLayouts: (layouts) => {
-    set({ layouts });
-  },
+    set({ isSaving: true });
+    try {
+      const layoutFile: LayoutFile = {
+        version: 1,
+        planHash,
+        layouts,
+        lastModified: new Date().toISOString(),
+      };
+      await invoke('write_layout', { planPath, layout: layoutFile });
+      set({ isSaving: false, isDirty: false });
+      console.log('Layout auto-saved');
+    } catch (err) {
+      console.error('Auto-save failed:', err);
+      set({
+        error: err instanceof Error ? err.message : String(err),
+        isSaving: false,
+      });
+    }
+  };
 
-  setSelectedNode: (nodeId) => {
-    set({ selectedNodeId: nodeId });
-  },
+  debouncedSave = debounce(performSave, AUTOSAVE_DELAY);
 
-  clearPlan: () => {
-    set({
-      planPath: null,
-      plan: null,
-      layouts: {},
-      planHash: '',
-      selectedNodeId: null,
-      error: null,
-    });
-  },
+  return {
+    // Initial state
+    planPath: null,
+    plan: null,
+    layouts: {},
+    planHash: '',
+    selectedNodeId: null,
+    isLoading: false,
+    isSaving: false,
+    isDirty: false,
+    error: null,
+
+    // Synchronous actions
+    setPlan: (plan, planPath, planHash) => {
+      set({ plan, planPath, planHash, error: null });
+    },
+
+    setLayouts: (layouts) => {
+      set({ layouts });
+    },
+
+    updateLayoutsAndSave: (layouts) => {
+      const { planPath } = get();
+      set({ layouts, isDirty: true });
+
+      // Only auto-save if we have a file path (not demo mode)
+      if (planPath && debouncedSave) {
+        debouncedSave();
+      }
+    },
+
+    setSelectedNode: (nodeId) => {
+      set({ selectedNodeId: nodeId });
+    },
+
+    clearPlan: () => {
+      set({
+        planPath: null,
+        plan: null,
+        layouts: {},
+        planHash: '',
+        selectedNodeId: null,
+        isDirty: false,
+        error: null,
+      });
+    },
 
   // Async actions
   loadLayout: async (planPath) => {
@@ -103,7 +154,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     const { planPath, layouts, planHash } = get();
     if (!planPath) return;
 
-    set({ isLoading: true, error: null });
+    set({ isSaving: true, error: null });
     try {
       const layoutFile: LayoutFile = {
         version: 1,
@@ -112,11 +163,11 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         lastModified: new Date().toISOString(),
       };
       await invoke('write_layout', { planPath, layout: layoutFile });
-      set({ isLoading: false });
+      set({ isSaving: false, isDirty: false });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : String(err),
-        isLoading: false,
+        isSaving: false,
       });
     }
   },
@@ -170,6 +221,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       }
     }
   },
-}));
+  };
+});
 
 export default usePlanStore;
