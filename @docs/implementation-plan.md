@@ -71,6 +71,11 @@
 - Keyboard shortcuts; toasts/errors; loading skeletons.
 - Accessibility: focus management, ARIA labels for chat/input/lists.
 
+**Phase 10 — CodexMonitor Auth Parity**
+- Prefer CLI-owned auth for Codex sessions (do not read tokens directly); rely on `CODEX_HOME` and CLI state.
+- Support optional per-plan `CODEX_HOME` override to scope Codex sessions.
+- Add legacy Codex home discovery hook if plan-level storage is introduced later.
+
 ## Risks & Mitigations
 - **PTY bridging complexity:** start with OpenCode ACP (no PTY), then add PTY adapter with a thin translation layer; keep clear separation between ACP transport and PTY transport.
 - **Markdown drift:** enforce stable IDs; serializer preserves formatting; include tests for diff stability.

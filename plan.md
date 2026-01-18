@@ -53,3 +53,8 @@
 - [ ] Status badges/colors and animations for updates on canvas (id: t31)
 - [ ] Keyboard shortcuts, toasts, loading skeletons (id: t32)
 - [ ] Accessibility pass (focus, ARIA for chat/input/lists) (id: t33)
+
+## Phase 10 — CodexMonitor Auth Parity
+- [ ] Prefer CLI-owned auth (no direct token reads); rely on CLI config/state in `CODEX_HOME` (id: t35)
+- [ ] Support optional per-plan `CODEX_HOME` override for Codex sessions (id: t36)
+- [ ] Add legacy Codex home discovery hook if we introduce plan-level storage (id: t37)
