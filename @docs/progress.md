@@ -14,10 +14,11 @@
   - [x] t9: Implement Rust commands for plan.layout.json read/write with defaults
   - [x] t10: Add .plan-history/ snapshot rotation with 5-plan limit and time-based cadence
   - [x] t11: Auto-place unpositioned nodes when merging layout with grid-based positioning
-- [ ] Phase 3 — Canvas MVP
+- [x] Phase 3 — Canvas MVP (completed 2026-01-18)
   - [x] t12: Render phases/tasks as tldraw shapes with dependency arrows
   - [x] t13: Enable drag/resize/inline edit; debounce auto-save to layout
   - [x] t14: Quick actions: add task/phase, mark done/in-progress
+  - [x] t15: Write-through to markdown and layout with minimal diffs
 - [ ] Phase 4 — File Watch & Sync
 - [ ] Phase 5 — Chat Panel (Mock → Real)
 - [ ] Phase 6 — Agent Integration (Claude-first, then Codex/OpenCode)

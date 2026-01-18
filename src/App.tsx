@@ -159,7 +159,7 @@ export default function App() {
 
         if (result.success) {
           const hash = hashString(content);
-          await mergeLayout(result.doc, selected, hash);
+          await mergeLayout(result.doc, selected, hash, result.title);
           setIsCanvasView(true);
         } else {
           console.error('Parse errors:', result.errors);

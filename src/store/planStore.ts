@@ -4,8 +4,10 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import type { PlanDoc, LayoutMap, LayoutFile, PlanNode, Status } from '../types';
 import { debounce } from '../lib/utils';
+import { serializePlan, computePlanHash } from '../parser/serializer';
 
 /** Debounce delay for auto-save (ms) */
 const AUTOSAVE_DELAY = 1000;
@@ -25,6 +27,7 @@ interface NodeInfo {
 interface PlanState {
   // Current plan data
   planPath: string | null;
+  planTitle: string;
   plan: PlanDoc | null;
   layouts: LayoutMap;
   planHash: string;
@@ -37,7 +40,7 @@ interface PlanState {
   error: string | null;
 
   // Actions
-  setPlan: (plan: PlanDoc, planPath: string, planHash: string) => void;
+  setPlan: (plan: PlanDoc, planPath: string, planHash: string, title?: string) => void;
   setLayouts: (layouts: LayoutMap) => void;
   updateLayoutsAndSave: (layouts: LayoutMap) => void;
   setSelectedNode: (nodeId: string | null) => void;
@@ -49,7 +52,7 @@ interface PlanState {
   // Async actions
   loadLayout: (planPath: string) => Promise<void>;
   saveLayout: () => Promise<void>;
-  mergeLayout: (plan: PlanDoc, planPath: string, planHash: string) => Promise<void>;
+  mergeLayout: (plan: PlanDoc, planPath: string, planHash: string, title?: string) => Promise<void>;
 }
 
 /** Convert PlanNode to NodeInfo for Rust API */
@@ -65,22 +68,30 @@ function toNodeInfo(node: PlanNode): NodeInfo {
 let debouncedSave: (() => void) | null = null;
 
 export const usePlanStore = create<PlanState>((set, get) => {
-  // Create debounced save function
+  // Create debounced save function that saves both layout and markdown
   const performSave = async () => {
-    const { planPath, layouts, planHash } = get();
-    if (!planPath) return;
+    const { planPath, plan, planTitle, layouts } = get();
+    if (!planPath || !plan) return;
 
     set({ isSaving: true });
     try {
+      // Serialize and save markdown
+      const markdown = serializePlan(plan, { title: planTitle });
+      const newHash = computePlanHash(markdown);
+
+      await writeTextFile(planPath, markdown);
+
+      // Save layout
       const layoutFile: LayoutFile = {
         version: 1,
-        planHash,
+        planHash: newHash,
         layouts,
         lastModified: new Date().toISOString(),
       };
       await invoke('write_layout', { planPath, layout: layoutFile });
-      set({ isSaving: false, isDirty: false });
-      console.log('Layout auto-saved');
+
+      set({ isSaving: false, isDirty: false, planHash: newHash });
+      console.log('Plan and layout auto-saved');
     } catch (err) {
       console.error('Auto-save failed:', err);
       set({
@@ -95,6 +106,7 @@ export const usePlanStore = create<PlanState>((set, get) => {
   return {
     // Initial state
     planPath: null,
+    planTitle: 'Untitled Plan',
     plan: null,
     layouts: {},
     planHash: '',
@@ -105,8 +117,8 @@ export const usePlanStore = create<PlanState>((set, get) => {
     error: null,
 
     // Synchronous actions
-    setPlan: (plan, planPath, planHash) => {
-      set({ plan, planPath, planHash, error: null });
+    setPlan: (plan, planPath, planHash, title = 'Untitled Plan') => {
+      set({ plan, planPath, planHash, planTitle: title, error: null });
     },
 
     setLayouts: (layouts) => {
@@ -171,6 +183,7 @@ export const usePlanStore = create<PlanState>((set, get) => {
         return node;
       });
 
+      const { planPath } = get();
       set({
         plan: {
           ...plan,
@@ -179,6 +192,11 @@ export const usePlanStore = create<PlanState>((set, get) => {
         },
         isDirty: true,
       });
+
+      // Trigger auto-save if we have a file path
+      if (planPath && debouncedSave) {
+        debouncedSave();
+      }
     },
 
     deleteNode: (nodeId) => {
@@ -225,6 +243,7 @@ export const usePlanStore = create<PlanState>((set, get) => {
         delete updatedLayouts[nodeId];
         taskIds.forEach((id) => delete updatedLayouts[id]);
 
+        const { planPath } = get();
         set({
           plan: {
             ...plan,
@@ -236,6 +255,11 @@ export const usePlanStore = create<PlanState>((set, get) => {
           selectedNodeId: null,
           isDirty: true,
         });
+
+        // Trigger auto-save
+        if (planPath && debouncedSave) {
+          debouncedSave();
+        }
         return;
       }
 
@@ -243,6 +267,7 @@ export const usePlanStore = create<PlanState>((set, get) => {
       const updatedLayouts = { ...layouts };
       delete updatedLayouts[nodeId];
 
+      const { planPath } = get();
       set({
         plan: {
           ...plan,
@@ -254,6 +279,11 @@ export const usePlanStore = create<PlanState>((set, get) => {
         selectedNodeId: null,
         isDirty: true,
       });
+
+      // Trigger auto-save
+      if (planPath && debouncedSave) {
+        debouncedSave();
+      }
     },
 
     addTask: (phaseId, content) => {
@@ -312,6 +342,7 @@ export const usePlanStore = create<PlanState>((set, get) => {
         tasks: [...updatedPhases[phaseIndex].tasks, newTask],
       };
 
+      const { planPath } = get();
       set({
         plan: {
           ...plan,
@@ -325,11 +356,17 @@ export const usePlanStore = create<PlanState>((set, get) => {
         selectedNodeId: newId,
         isDirty: true,
       });
+
+      // Trigger auto-save
+      if (planPath && debouncedSave) {
+        debouncedSave();
+      }
     },
 
     clearPlan: () => {
       set({
         planPath: null,
+        planTitle: 'Untitled Plan',
         plan: null,
         layouts: {},
         planHash: '',
@@ -375,7 +412,7 @@ export const usePlanStore = create<PlanState>((set, get) => {
     }
   },
 
-  mergeLayout: async (plan, planPath, planHash) => {
+  mergeLayout: async (plan, planPath, planHash, title = 'Untitled Plan') => {
     set({ isLoading: true, error: null });
     try {
       const nodes = plan.nodes.map(toNodeInfo);
@@ -389,6 +426,7 @@ export const usePlanStore = create<PlanState>((set, get) => {
         plan,
         planPath,
         planHash,
+        planTitle: title,
         layouts: result.layout.layouts,
         isLoading: false,
       });
@@ -413,6 +451,7 @@ export const usePlanStore = create<PlanState>((set, get) => {
           plan,
           planPath,
           planHash,
+          planTitle: title,
           layouts: layoutFile.layouts,
           isLoading: false,
         });
