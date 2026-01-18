@@ -15,6 +15,7 @@
   - [x] t10: Add .plan-history/ snapshot rotation with 5-plan limit and time-based cadence
   - [x] t11: Auto-place unpositioned nodes when merging layout with grid-based positioning
 - [ ] Phase 3 — Canvas MVP
+  - [x] t12: Render phases/tasks as tldraw shapes with dependency arrows
 - [ ] Phase 4 — File Watch & Sync
 - [ ] Phase 5 — Chat Panel (Mock → Real)
 - [ ] Phase 6 — Agent Integration (Claude-first, then Codex/OpenCode)

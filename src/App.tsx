@@ -1,103 +1,196 @@
-import { useMemo } from "react";
-import { Sparkles, Terminal, Workflow } from "lucide-react";
+import { useState, useCallback, useEffect } from 'react';
+import { FileText, FolderOpen, X } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readTextFile } from '@tauri-apps/plugin-fs';
 
-import { Button } from "./components/ui/button";
+import { Button } from './components/ui/button';
+import { PlanCanvas } from './canvas';
+import { usePlanStore } from './store';
+import { parsePlan } from './parser';
+import type { PlanDoc, LayoutMap } from './types';
 
-type QuickTask = {
-  title: string;
-  description: string;
+/** Simple hash function for plan content */
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(16);
+}
+
+/** Sample plan for demo mode */
+const SAMPLE_PLAN: PlanDoc = {
+  phases: [
+    {
+      id: 'phase_0',
+      title: 'Phase 0 — Bootstrap',
+      tasks: [
+        { id: 't1', content: 'Initialize project', status: 'completed' },
+        { id: 't2', content: 'Add dependencies', status: 'completed' },
+      ],
+    },
+    {
+      id: 'phase_1',
+      title: 'Phase 1 — Core Features',
+      tasks: [
+        { id: 't3', content: 'Build parser', status: 'completed', dependencies: ['t1'] },
+        { id: 't4', content: 'Create canvas', status: 'in_progress', dependencies: ['t2'] },
+        { id: 't5', content: 'Add state management', status: 'pending', dependencies: ['t3', 't4'] },
+      ],
+    },
+  ],
+  nodes: [
+    { id: 'phase_0', type: 'phase', label: 'Bootstrap', status: 'completed' },
+    { id: 't1', type: 'task', label: 'Initialize project', status: 'completed', phaseId: 'phase_0' },
+    { id: 't2', type: 'task', label: 'Add dependencies', status: 'completed', phaseId: 'phase_0' },
+    { id: 'phase_1', type: 'phase', label: 'Core Features', status: 'in_progress' },
+    { id: 't3', type: 'task', label: 'Build parser', status: 'completed', phaseId: 'phase_1' },
+    { id: 't4', type: 'task', label: 'Create canvas', status: 'in_progress', phaseId: 'phase_1' },
+    { id: 't5', type: 'task', label: 'Add state management', status: 'pending', phaseId: 'phase_1' },
+  ],
+  edges: [
+    { id: 'edge_t1_t3', from: 't1', to: 't3' },
+    { id: 'edge_t2_t4', from: 't2', to: 't4' },
+    { id: 'edge_t3_t5', from: 't3', to: 't5' },
+    { id: 'edge_t4_t5', from: 't4', to: 't5' },
+  ],
 };
 
-const quickTasks: QuickTask[] = [
-  { title: "Bootstrap UI", description: "Tauri + React 19 + shacn shell" },
-  { title: "Plan sync", description: "Parse plan.md and render nodes" },
-  { title: "Agent bridge", description: "Claude/Codex PTY adapter" },
-];
+/** Sample layout for demo mode */
+const SAMPLE_LAYOUTS: LayoutMap = {
+  phase_0: { x: 50, y: 50, width: 200, height: 50 },
+  t1: { x: 50, y: 130, width: 280, height: 80 },
+  t2: { x: 370, y: 130, width: 280, height: 80 },
+  phase_1: { x: 50, y: 260, width: 200, height: 50 },
+  t3: { x: 50, y: 340, width: 280, height: 80 },
+  t4: { x: 370, y: 340, width: 280, height: 80 },
+  t5: { x: 210, y: 460, width: 280, height: 80 },
+};
 
-function Hero() {
-  const highlights = useMemo(
-    () => [
-      { icon: <Workflow size={18} />, label: "Canvas + plan sync" },
-      { icon: <Terminal size={18} />, label: "Terminal-aware agents" },
-      { icon: <Sparkles size={18} />, label: "React 19 + Tauri" },
-    ],
-    [],
-  );
-
+function WelcomeScreen({ onOpenPlan, onDemoMode }: { onOpenPlan: () => void; onDemoMode: () => void }) {
   return (
-    <div className="glass-card p-8 lg:p-10 relative overflow-hidden">
-      <div className="absolute inset-0 opacity-60 grid-smooth" aria-hidden />
-      <div className="relative flex flex-col gap-6">
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-white/60 px-3 backdrop-blur">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Plan Visualizer
-          </span>
-          <span className="text-xs text-muted-foreground">Phase 0 bootstrap</span>
-        </div>
-        <div className="space-y-3">
-          <h1 className="text-3xl font-semibold text-foreground sm:text-4xl">
-            Visual plans meet agent chat in one canvas.
-          </h1>
-          <p className="max-w-2xl text-base text-muted-foreground leading-relaxed">
-            React 19 + Tauri shell with TLDraw canvas, chat, and terminal continuity. This shell
-            scaffolds the groundwork for syncing `plan.md` with a visual layout and bridging Claude /
-            Codex sessions.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="default" size="lg">
-            Open Plan
-          </Button>
-          <Button variant="outline" size="lg">
-            Start Agent Session
-          </Button>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {highlights.map((item) => (
-            <div
-              key={item.label}
-              className="rounded-xl border border-border/70 bg-white/70 p-4 backdrop-blur-sm shadow-sm"
-            >
-              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <span className="text-primary">{item.icon}</span>
-                {item.label}
-              </div>
-            </div>
-          ))}
-        </div>
+    <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-semibold text-foreground">Plan Visualizer</h1>
+        <p className="text-muted-foreground max-w-md">
+          Visualize your plan.md as an interactive canvas with phases, tasks, and dependencies.
+        </p>
+      </div>
+      <div className="flex gap-3">
+        <Button onClick={onOpenPlan} size="lg">
+          <FolderOpen className="mr-2 h-4 w-4" />
+          Open Plan
+        </Button>
+        <Button onClick={onDemoMode} variant="outline" size="lg">
+          <FileText className="mr-2 h-4 w-4" />
+          Demo Mode
+        </Button>
       </div>
     </div>
   );
 }
 
-function QuickList() {
+function CanvasHeader({
+  planPath,
+  onClose,
+}: {
+  planPath: string | null;
+  onClose: () => void;
+}) {
+  const fileName = planPath ? planPath.split('/').pop() : 'Demo Plan';
+
   return (
-    <div className="glass-card p-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-foreground">Next steps</h2>
-        <Button size="sm" variant="ghost">
-          View plan.md
-        </Button>
+    <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-white/80 backdrop-blur-sm">
+      <div className="flex items-center gap-2">
+        <FileText className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">{fileName}</span>
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {quickTasks.map((item) => (
-          <div key={item.title} className="rounded-lg border border-border bg-white/70 p-4">
-            <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
-          </div>
-        ))}
-      </div>
+      <Button variant="ghost" size="sm" onClick={onClose}>
+        <X className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
 
 export default function App() {
+  const {
+    plan,
+    planPath,
+    layouts,
+    setLayouts,
+    setPlan,
+    clearPlan,
+    mergeLayout,
+    selectedNodeId,
+    setSelectedNode,
+  } = usePlanStore();
+
+  const [isCanvasView, setIsCanvasView] = useState(false);
+
+  const handleOpenPlan = useCallback(async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'Markdown', extensions: ['md'] }],
+      });
+
+      if (selected && typeof selected === 'string') {
+        const content = await readTextFile(selected);
+        const result = parsePlan(content);
+
+        if (result.success) {
+          const hash = hashString(content);
+          await mergeLayout(result.doc, selected, hash);
+          setIsCanvasView(true);
+        } else {
+          console.error('Parse errors:', result.errors);
+          alert(`Failed to parse plan:\n${result.errors.join('\n')}`);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to open plan:', err);
+    }
+  }, [mergeLayout]);
+
+  const handleDemoMode = useCallback(() => {
+    setPlan(SAMPLE_PLAN, '', 'demo');
+    setLayouts(SAMPLE_LAYOUTS);
+    setIsCanvasView(true);
+  }, [setPlan, setLayouts]);
+
+  const handleClose = useCallback(() => {
+    clearPlan();
+    setIsCanvasView(false);
+  }, [clearPlan]);
+
+  const handleLayoutChange = useCallback(
+    (newLayouts: LayoutMap) => {
+      setLayouts(newLayouts);
+      // TODO: Debounce and save to file in t13
+    },
+    [setLayouts]
+  );
+
+  if (!isCanvasView) {
+    return (
+      <main className="h-screen bg-gradient-to-br from-[#f7f8fb] via-[#eef1f8] to-[#e6ebf5]">
+        <WelcomeScreen onOpenPlan={handleOpenPlan} onDemoMode={handleDemoMode} />
+      </main>
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#f7f8fb] via-[#eef1f8] to-[#e6ebf5] px-4 py-6 text-foreground sm:px-8 sm:py-10">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <Hero />
-        <QuickList />
+    <main className="h-screen flex flex-col bg-background">
+      <CanvasHeader planPath={planPath} onClose={handleClose} />
+      <div className="flex-1 relative">
+        <PlanCanvas
+          plan={plan}
+          layouts={layouts}
+          onLayoutChange={handleLayoutChange}
+          onNodeSelect={setSelectedNode}
+        />
       </div>
     </main>
   );
