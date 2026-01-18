@@ -36,7 +36,11 @@
   - [x] t26: Persist last opened plan and last-used agent per plan in preferences.json
   - [x] t27: Add startup logic to handle CLI args or show plan picker with recent plans
   - [x] t28: Update UI to reflect launch configuration with auto-connect and agent persistence
-- [ ] Phase 8 — Terminal Session Bridging
+- [x] Phase 8 — Terminal Session Bridging (completed 2026-01-18)
+  - [x] t29: Create terminalStore to manage PTY events and state
+  - [x] t30: Build Terminal component with output display and input handling
+  - [x] t31: Add resize handling via ResizeObserver with dynamic row/col calculation
+  - [x] t32: Implement session lifecycle with start/stop/cleanup and exit handling
 - [ ] Phase 9 — Polish & UX
 
 Notes will be appended here as phases complete.

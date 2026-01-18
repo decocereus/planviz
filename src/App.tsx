@@ -1,5 +1,16 @@
 import { useState, useCallback, useEffect } from 'react';
-import { FileText, FolderOpen, X, PanelRightClose, PanelRightOpen, Clock, Trash2 } from 'lucide-react';
+import {
+  FileText,
+  FolderOpen,
+  X,
+  PanelRightClose,
+  PanelRightOpen,
+  Clock,
+  Trash2,
+  Terminal as TerminalIcon,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 
@@ -7,8 +18,9 @@ import { Button } from './components/ui/button';
 import { QuickActions } from './components/QuickActions';
 import { ConflictBanner } from './components/ConflictBanner';
 import { ChatPanel } from './components/chat';
+import { Terminal } from './components/terminal';
 import { PlanCanvas } from './canvas';
-import { usePlanStore, usePreferencesStore } from './store';
+import { usePlanStore, usePreferencesStore, useTerminalStore } from './store';
 import { parsePlan } from './parser';
 import { useFileWatcher, startWatching, stopWatching } from './hooks';
 import type { PlanDoc, LayoutMap, Status } from './types';
@@ -161,6 +173,8 @@ function CanvasHeader({
   isSaving,
   isChatOpen,
   onToggleChat,
+  isTerminalOpen,
+  onToggleTerminal,
 }: {
   planPath: string | null;
   onClose: () => void;
@@ -168,6 +182,8 @@ function CanvasHeader({
   isSaving: boolean;
   isChatOpen: boolean;
   onToggleChat: () => void;
+  isTerminalOpen: boolean;
+  onToggleTerminal: () => void;
 }) {
   const fileName = planPath ? planPath.split('/').pop() : 'Demo Plan';
 
@@ -184,6 +200,19 @@ function CanvasHeader({
         )}
       </div>
       <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleTerminal}
+          title={isTerminalOpen ? 'Hide terminal' : 'Show terminal'}
+        >
+          <TerminalIcon className="h-4 w-4" />
+          {isTerminalOpen ? (
+            <ChevronDown className="h-3 w-3 ml-1" />
+          ) : (
+            <ChevronUp className="h-3 w-3 ml-1" />
+          )}
+        </Button>
         <Button variant="ghost" size="sm" onClick={onToggleChat} title={isChatOpen ? 'Hide chat' : 'Show chat'}>
           {isChatOpen ? (
             <PanelRightClose className="h-4 w-4" />
@@ -237,8 +266,11 @@ export default function App() {
 
   const [isCanvasView, setIsCanvasView] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isStartupLoading, setIsStartupLoading] = useState(true);
   const [cwd, setCwd] = useState('.');
+
+  const { stopSession: stopTerminalSession } = useTerminalStore();
 
   // Load launch config and preferences on startup
   useEffect(() => {
@@ -349,9 +381,11 @@ export default function App() {
 
   const handleClose = useCallback(async () => {
     await stopWatching();
+    await stopTerminalSession();
     clearPlan();
     setIsCanvasView(false);
-  }, [clearPlan]);
+    setIsTerminalOpen(false);
+  }, [clearPlan, stopTerminalSession]);
 
   const handleLayoutChange = useCallback(
     (newLayouts: LayoutMap) => {
@@ -422,31 +456,42 @@ export default function App() {
         isSaving={isSaving}
         isChatOpen={isChatOpen}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
+        isTerminalOpen={isTerminalOpen}
+        onToggleTerminal={() => setIsTerminalOpen(!isTerminalOpen)}
       />
       <div className="flex-1 flex overflow-hidden">
-        {/* Canvas area */}
-        <div className="flex-1 relative">
-          {hasExternalChanges && externalChangeType && (
-            <ConflictBanner
-              changeType={externalChangeType}
-              onReload={handleReloadFromBanner}
-              onDismiss={dismissExternalChanges}
+        {/* Canvas + Terminal area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Canvas area */}
+          <div className="flex-1 relative">
+            {hasExternalChanges && externalChangeType && (
+              <ConflictBanner
+                changeType={externalChangeType}
+                onReload={handleReloadFromBanner}
+                onDismiss={dismissExternalChanges}
+              />
+            )}
+            <PlanCanvas
+              plan={plan}
+              layouts={layouts}
+              onLayoutChange={handleLayoutChange}
+              onNodeSelect={setSelectedNode}
             />
+            <QuickActions
+              selectedNodeId={selectedNodeId}
+              nodeType={selectedNode?.type ?? null}
+              currentStatus={selectedNode?.status ?? null}
+              onStatusChange={handleStatusChange}
+              onDelete={handleDelete}
+              onAddTask={handleAddTask}
+            />
+          </div>
+          {/* Terminal panel */}
+          {isTerminalOpen && (
+            <div className="h-64 border-t border-border flex-shrink-0">
+              <Terminal cwd={cwd} />
+            </div>
           )}
-          <PlanCanvas
-            plan={plan}
-            layouts={layouts}
-            onLayoutChange={handleLayoutChange}
-            onNodeSelect={setSelectedNode}
-          />
-          <QuickActions
-            selectedNodeId={selectedNodeId}
-            nodeType={selectedNode?.type ?? null}
-            currentStatus={selectedNode?.status ?? null}
-            onStatusChange={handleStatusChange}
-            onDelete={handleDelete}
-            onAddTask={handleAddTask}
-          />
         </div>
         {/* Chat panel */}
         {isChatOpen && (
