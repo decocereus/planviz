@@ -21,6 +21,7 @@ notify-debouncer-mini = "0.4"
 tokio = { version = "1", features = ["time", "sync", "io-util", "rt"] }
 portable-pty = "0.8"
 dirs = "5"
+clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3"

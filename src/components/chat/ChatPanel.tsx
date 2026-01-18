@@ -19,9 +19,10 @@ import { useAgentStore } from '../../store/agentStore';
 interface ChatPanelProps {
   className?: string;
   cwd?: string;
+  planPath?: string | null;
 }
 
-export function ChatPanel({ className, cwd = '.' }: ChatPanelProps) {
+export function ChatPanel({ className, cwd = '.', planPath }: ChatPanelProps) {
   const {
     messages,
     isStreaming,
@@ -89,7 +90,7 @@ export function ChatPanel({ className, cwd = '.' }: ChatPanelProps) {
       </div>
 
       {/* Agent Selector */}
-      <AgentSelector cwd={cwd} />
+      <AgentSelector cwd={cwd} planPath={planPath ?? undefined} />
 
       {/* Messages */}
       <ScrollArea className="flex-1">

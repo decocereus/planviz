@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { FileText, FolderOpen, X, MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { FileText, FolderOpen, X, PanelRightClose, PanelRightOpen, Clock, Trash2 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 
@@ -8,7 +8,7 @@ import { QuickActions } from './components/QuickActions';
 import { ConflictBanner } from './components/ConflictBanner';
 import { ChatPanel } from './components/chat';
 import { PlanCanvas } from './canvas';
-import { usePlanStore } from './store';
+import { usePlanStore, usePreferencesStore } from './store';
 import { parsePlan } from './parser';
 import { useFileWatcher, startWatching, stopWatching } from './hooks';
 import type { PlanDoc, LayoutMap, Status } from './types';
@@ -73,7 +73,23 @@ const SAMPLE_LAYOUTS: LayoutMap = {
   t5: { x: 210, y: 460, width: 280, height: 80 },
 };
 
-function WelcomeScreen({ onOpenPlan, onDemoMode }: { onOpenPlan: () => void; onDemoMode: () => void }) {
+interface WelcomeScreenProps {
+  onOpenPlan: () => void;
+  onOpenRecentPlan: (path: string) => void;
+  onRemoveRecentPlan: (path: string) => void;
+  onDemoMode: () => void;
+  recentPlans: string[];
+  isLoading: boolean;
+}
+
+function WelcomeScreen({
+  onOpenPlan,
+  onOpenRecentPlan,
+  onRemoveRecentPlan,
+  onDemoMode,
+  recentPlans,
+  isLoading,
+}: WelcomeScreenProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
       <div className="text-center space-y-2">
@@ -82,6 +98,7 @@ function WelcomeScreen({ onOpenPlan, onDemoMode }: { onOpenPlan: () => void; onD
           Visualize your plan.md as an interactive canvas with phases, tasks, and dependencies.
         </p>
       </div>
+
       <div className="flex gap-3">
         <Button onClick={onOpenPlan} size="lg">
           <FolderOpen className="mr-2 h-4 w-4" />
@@ -92,6 +109,47 @@ function WelcomeScreen({ onOpenPlan, onDemoMode }: { onOpenPlan: () => void; onD
           Demo Mode
         </Button>
       </div>
+
+      {/* Recent Plans */}
+      {recentPlans.length > 0 && (
+        <div className="w-full max-w-md mt-4">
+          <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            <span>Recent Plans</span>
+          </div>
+          <div className="space-y-1">
+            {recentPlans.slice(0, 5).map((path) => (
+              <div
+                key={path}
+                className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 group"
+              >
+                <button
+                  onClick={() => onOpenRecentPlan(path)}
+                  className="flex-1 flex items-center gap-2 text-left text-sm truncate"
+                  disabled={isLoading}
+                >
+                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate">{path.split('/').pop()}</span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveRecentPlan(path);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded transition-opacity"
+                  title="Remove from recent"
+                >
+                  <Trash2 className="h-3 w-3 text-muted-foreground" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      )}
     </div>
   );
 }
@@ -166,8 +224,77 @@ export default function App() {
     reloadLayout,
   } = usePlanStore();
 
+  const {
+    launchConfig,
+    preferences,
+    isLoadingConfig,
+    isLoadingPreferences,
+    loadLaunchConfig,
+    loadPreferences,
+    setLastPlan,
+    removeRecentPlan,
+  } = usePreferencesStore();
+
   const [isCanvasView, setIsCanvasView] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const [isStartupLoading, setIsStartupLoading] = useState(true);
+  const [cwd, setCwd] = useState('.');
+
+  // Load launch config and preferences on startup
+  useEffect(() => {
+    const initialize = async () => {
+      setIsStartupLoading(true);
+      await Promise.all([loadLaunchConfig(), loadPreferences()]);
+      setIsStartupLoading(false);
+    };
+    initialize();
+  }, [loadLaunchConfig, loadPreferences]);
+
+  // Handle CLI args after config is loaded
+  useEffect(() => {
+    if (isStartupLoading || !launchConfig) return;
+
+    const handleStartup = async () => {
+      // Set cwd from launch config
+      if (launchConfig.cwd) {
+        setCwd(launchConfig.cwd);
+      }
+
+      // Auto-open plan if provided via CLI
+      if (launchConfig.planPath) {
+        await openPlanFile(launchConfig.planPath);
+      }
+    };
+
+    handleStartup();
+  }, [isStartupLoading, launchConfig]);
+
+  // Helper function to open a plan file
+  const openPlanFile = useCallback(async (filePath: string) => {
+    try {
+      const content = await readTextFile(filePath);
+      const result = parsePlan(content);
+
+      if (result.success) {
+        const hash = hashString(content);
+        await mergeLayout(result.doc, filePath, hash, result.title);
+        await startWatching(filePath);
+        await setLastPlan(filePath);
+
+        // Set cwd to the plan's directory
+        const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+        if (dir) setCwd(dir);
+
+        setIsCanvasView(true);
+      } else {
+        console.error('Parse errors:', result.errors);
+        alert(`Failed to parse plan:\n${result.errors.join('\n')}`);
+      }
+    } catch (err) {
+      console.error('Failed to open plan:', err);
+      alert(`Failed to open plan: ${err}`);
+    }
+  }, [mergeLayout, setLastPlan]);
 
   // Handle external file changes
   const handleExternalPlanChange = useCallback(
@@ -199,24 +326,20 @@ export default function App() {
       });
 
       if (selected && typeof selected === 'string') {
-        const content = await readTextFile(selected);
-        const result = parsePlan(content);
-
-        if (result.success) {
-          const hash = hashString(content);
-          await mergeLayout(result.doc, selected, hash, result.title);
-          // Start watching for external file changes
-          await startWatching(selected);
-          setIsCanvasView(true);
-        } else {
-          console.error('Parse errors:', result.errors);
-          alert(`Failed to parse plan:\n${result.errors.join('\n')}`);
-        }
+        await openPlanFile(selected);
       }
     } catch (err) {
       console.error('Failed to open plan:', err);
     }
-  }, [mergeLayout]);
+  }, [openPlanFile]);
+
+  const handleOpenRecentPlan = useCallback(async (path: string) => {
+    await openPlanFile(path);
+  }, [openPlanFile]);
+
+  const handleRemoveRecentPlan = useCallback(async (path: string) => {
+    await removeRecentPlan(path);
+  }, [removeRecentPlan]);
 
   const handleDemoMode = useCallback(() => {
     setPlan(SAMPLE_PLAN, '', 'demo');
@@ -278,7 +401,14 @@ export default function App() {
   if (!isCanvasView) {
     return (
       <main className="h-screen bg-gradient-to-br from-[#f7f8fb] via-[#eef1f8] to-[#e6ebf5]">
-        <WelcomeScreen onOpenPlan={handleOpenPlan} onDemoMode={handleDemoMode} />
+        <WelcomeScreen
+          onOpenPlan={handleOpenPlan}
+          onOpenRecentPlan={handleOpenRecentPlan}
+          onRemoveRecentPlan={handleRemoveRecentPlan}
+          onDemoMode={handleDemoMode}
+          recentPlans={preferences?.recentPlans ?? []}
+          isLoading={isStartupLoading || isLoadingConfig || isLoadingPreferences}
+        />
       </main>
     );
   }
@@ -320,7 +450,7 @@ export default function App() {
         </div>
         {/* Chat panel */}
         {isChatOpen && (
-          <ChatPanel className="w-96 flex-shrink-0" />
+          <ChatPanel className="w-96 flex-shrink-0" cwd={cwd} planPath={planPath} />
         )}
       </div>
     </main>

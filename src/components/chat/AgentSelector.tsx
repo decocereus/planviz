@@ -2,10 +2,11 @@
  * AgentSelector - Component for selecting and connecting to AI agents
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Bot, Check, X, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAgentStore, setupAgentEventListener, teardownAgentEventListener } from '../../store/agentStore';
+import { usePreferencesStore } from '../../store/preferencesStore';
 import type { AgentType } from '../../types';
 import { cn } from '../../lib/utils';
 
@@ -26,10 +27,11 @@ const AGENT_INFO: Record<AgentType, { name: string; description: string }> = {
 
 interface AgentSelectorProps {
   cwd: string;
+  planPath?: string;
   className?: string;
 }
 
-export function AgentSelector({ cwd, className }: AgentSelectorProps) {
+export function AgentSelector({ cwd, planPath, className }: AgentSelectorProps) {
   const {
     session,
     isConnecting,
@@ -42,6 +44,11 @@ export function AgentSelector({ cwd, className }: AgentSelectorProps) {
     clearError,
   } = useAgentStore();
 
+  const { launchConfig, preferences, setPlanAgent } = usePreferencesStore();
+
+  // Track if we've attempted auto-connect
+  const autoConnectAttempted = useRef(false);
+
   // Check available agents on mount
   useEffect(() => {
     checkAvailableAgents();
@@ -52,8 +59,62 @@ export function AgentSelector({ cwd, className }: AgentSelectorProps) {
     };
   }, [checkAvailableAgents]);
 
+  // Auto-connect based on CLI args or preferences
+  useEffect(() => {
+    if (autoConnectAttempted.current || isCheckingAgents || isConnecting || session?.connected) {
+      return;
+    }
+
+    // Determine which agent to auto-connect to
+    let targetAgent: AgentType | null = null;
+
+    // Priority 1: CLI --agent argument
+    if (launchConfig?.agent) {
+      const normalized = launchConfig.agent.replace('-', '_') as AgentType;
+      if (normalized in AGENT_INFO) {
+        targetAgent = normalized;
+      }
+    }
+
+    // Priority 2: Last-used agent for this plan
+    if (!targetAgent && planPath && preferences?.planPreferences[planPath]?.lastAgent) {
+      const lastAgent = preferences.planPreferences[planPath].lastAgent as AgentType;
+      if (lastAgent in AGENT_INFO) {
+        targetAgent = lastAgent;
+      }
+    }
+
+    // Priority 3: Default agent
+    if (!targetAgent && preferences?.defaultAgent) {
+      const defaultAgent = preferences.defaultAgent.replace('-', '_') as AgentType;
+      if (defaultAgent in AGENT_INFO) {
+        targetAgent = defaultAgent;
+      }
+    }
+
+    // Auto-connect if we have a target agent and it's available
+    if (targetAgent && availableAgents[targetAgent]?.found && availableAgents[targetAgent]?.cliAvailable) {
+      autoConnectAttempted.current = true;
+      connect(targetAgent, cwd);
+    }
+  }, [
+    launchConfig,
+    preferences,
+    planPath,
+    availableAgents,
+    isCheckingAgents,
+    isConnecting,
+    session?.connected,
+    connect,
+    cwd,
+  ]);
+
   const handleConnect = async (agentType: AgentType) => {
     await connect(agentType, cwd);
+    // Save the agent selection for this plan
+    if (planPath) {
+      await setPlanAgent(planPath, agentType);
+    }
   };
 
   const handleDisconnect = async () => {

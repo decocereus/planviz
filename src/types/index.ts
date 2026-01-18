@@ -121,3 +121,25 @@ export interface CredentialStatus {
   cliAvailable: boolean;
   error?: string;
 }
+
+/** Launch configuration from CLI */
+export interface LaunchConfig {
+  planPath?: string;
+  agent?: string;
+  cwd?: string;
+  fromCli: boolean;
+}
+
+/** Per-plan preferences */
+export interface PlanPreferences {
+  lastAgent?: string;
+  lastOpened?: number;
+}
+
+/** User preferences */
+export interface UserPreferences {
+  lastPlanPath?: string;
+  recentPlans: string[];
+  planPreferences: Record<string, PlanPreferences>;
+  defaultAgent?: string;
+}

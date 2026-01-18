@@ -31,7 +31,11 @@
   - [x] t22: Add credential discovery for Claude Code (file + Keychain)
   - [x] t23: Create Claude Code adapter bridging PTY to stream events
   - [x] t24: Add connection status, agent selector, and error handling in UI
-- [ ] Phase 7 — Agent Selector & Launch Modes
+- [x] Phase 7 — Agent Selector & Launch Modes (completed 2026-01-18)
+  - [x] t25: Add CLI argument parsing for --plan, --agent, --cwd arguments
+  - [x] t26: Persist last opened plan and last-used agent per plan in preferences.json
+  - [x] t27: Add startup logic to handle CLI args or show plan picker with recent plans
+  - [x] t28: Update UI to reflect launch configuration with auto-connect and agent persistence
 - [ ] Phase 8 — Terminal Session Bridging
 - [ ] Phase 9 — Polish & UX
 
