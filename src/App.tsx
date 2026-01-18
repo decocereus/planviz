@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   FileText,
   FolderOpen,
@@ -15,14 +15,16 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 
 import { Button } from './components/ui/button';
+import { WelcomeSkeleton } from './components/ui/skeleton';
 import { QuickActions } from './components/QuickActions';
 import { ConflictBanner } from './components/ConflictBanner';
 import { ChatPanel } from './components/chat';
 import { Terminal } from './components/terminal';
+import { ToastContainer, useToasts, toast } from './components/ui/toast';
 import { PlanCanvas } from './canvas';
 import { usePlanStore, usePreferencesStore, useTerminalStore } from './store';
 import { parsePlan } from './parser';
-import { useFileWatcher, startWatching, stopWatching } from './hooks';
+import { useFileWatcher, startWatching, stopWatching, useKeyboardShortcuts, type KeyboardShortcut } from './hooks';
 import type { PlanDoc, LayoutMap, Status } from './types';
 
 /** Simple hash function for plan content */
@@ -102,8 +104,16 @@ function WelcomeScreen({
   recentPlans,
   isLoading,
 }: WelcomeScreenProps) {
+  if (isLoading) {
+    return <WelcomeSkeleton />;
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+    <div
+      className="flex flex-col items-center justify-center h-full gap-6 p-8"
+      role="main"
+      aria-label="Welcome screen"
+    >
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-semibold text-foreground">Plan Visualizer</h1>
         <p className="text-muted-foreground max-w-md">
@@ -111,56 +121,55 @@ function WelcomeScreen({
         </p>
       </div>
 
-      <div className="flex gap-3">
-        <Button onClick={onOpenPlan} size="lg">
-          <FolderOpen className="mr-2 h-4 w-4" />
+      <div className="flex gap-3" role="group" aria-label="Main actions">
+        <Button onClick={onOpenPlan} size="lg" aria-label="Open plan file">
+          <FolderOpen className="mr-2 h-4 w-4" aria-hidden="true" />
           Open Plan
         </Button>
-        <Button onClick={onDemoMode} variant="outline" size="lg">
-          <FileText className="mr-2 h-4 w-4" />
+        <Button onClick={onDemoMode} variant="outline" size="lg" aria-label="Start demo mode">
+          <FileText className="mr-2 h-4 w-4" aria-hidden="true" />
           Demo Mode
         </Button>
       </div>
 
       {/* Recent Plans */}
       {recentPlans.length > 0 && (
-        <div className="w-full max-w-md mt-4">
+        <nav className="w-full max-w-md mt-4" aria-label="Recent plans">
           <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span>Recent Plans</span>
+            <Clock className="h-4 w-4" aria-hidden="true" />
+            <span id="recent-plans-label">Recent Plans</span>
           </div>
-          <div className="space-y-1">
-            {recentPlans.slice(0, 5).map((path) => (
-              <div
-                key={path}
-                className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 group"
-              >
-                <button
-                  onClick={() => onOpenRecentPlan(path)}
-                  className="flex-1 flex items-center gap-2 text-left text-sm truncate"
-                  disabled={isLoading}
+          <ul className="space-y-1" aria-labelledby="recent-plans-label">
+            {recentPlans.slice(0, 5).map((path) => {
+              const fileName = path.split('/').pop();
+              return (
+                <li
+                  key={path}
+                  className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 group"
                 >
-                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="truncate">{path.split('/').pop()}</span>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveRecentPlan(path);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded transition-opacity"
-                  title="Remove from recent"
-                >
-                  <Trash2 className="h-3 w-3 text-muted-foreground" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {isLoading && (
-        <div className="text-sm text-muted-foreground">Loading...</div>
+                  <button
+                    onClick={() => onOpenRecentPlan(path)}
+                    className="flex-1 flex items-center gap-2 text-left text-sm truncate"
+                    aria-label={`Open ${fileName}`}
+                  >
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+                    <span className="truncate">{fileName}</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveRecentPlan(path);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded transition-opacity"
+                    aria-label={`Remove ${fileName} from recent plans`}
+                  >
+                    <Trash2 className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
       )}
     </div>
   );
@@ -271,6 +280,7 @@ export default function App() {
   const [cwd, setCwd] = useState('.');
 
   const { stopSession: stopTerminalSession } = useTerminalStore();
+  const { toasts, removeToast } = useToasts();
 
   // Load launch config and preferences on startup
   useEffect(() => {
@@ -318,13 +328,14 @@ export default function App() {
         if (dir) setCwd(dir);
 
         setIsCanvasView(true);
+        toast.success(`Opened ${filePath.split('/').pop()}`);
       } else {
         console.error('Parse errors:', result.errors);
-        alert(`Failed to parse plan:\n${result.errors.join('\n')}`);
+        toast.error(`Failed to parse plan: ${result.errors[0]}`);
       }
     } catch (err) {
       console.error('Failed to open plan:', err);
-      alert(`Failed to open plan: ${err}`);
+      toast.error(`Failed to open plan: ${err}`);
     }
   }, [mergeLayout, setLastPlan]);
 
@@ -432,6 +443,44 @@ export default function App() {
   // Get selected node info for QuickActions
   const selectedNode = plan?.nodes.find((n) => n.id === selectedNodeId);
 
+  // Keyboard shortcuts
+  const shortcuts: KeyboardShortcut[] = useMemo(
+    () => [
+      {
+        key: 'o',
+        meta: true,
+        action: handleOpenPlan,
+        description: 'Open plan file',
+      },
+      {
+        key: 'j',
+        meta: true,
+        action: () => setIsChatOpen((prev) => !prev),
+        description: 'Toggle chat panel',
+      },
+      {
+        key: '`',
+        meta: true,
+        action: () => setIsTerminalOpen((prev) => !prev),
+        description: 'Toggle terminal',
+      },
+      {
+        key: 'escape',
+        action: () => setSelectedNode(null),
+        description: 'Deselect node',
+      },
+      {
+        key: 'w',
+        meta: true,
+        action: handleClose,
+        description: 'Close plan',
+      },
+    ],
+    [handleOpenPlan, handleClose, setSelectedNode]
+  );
+
+  useKeyboardShortcuts(shortcuts, isCanvasView);
+
   if (!isCanvasView) {
     return (
       <main className="h-screen bg-gradient-to-br from-[#f7f8fb] via-[#eef1f8] to-[#e6ebf5]">
@@ -443,6 +492,7 @@ export default function App() {
           recentPlans={preferences?.recentPlans ?? []}
           isLoading={isStartupLoading || isLoadingConfig || isLoadingPreferences}
         />
+        <ToastContainer toasts={toasts} onDismiss={removeToast} />
       </main>
     );
   }
@@ -498,6 +548,7 @@ export default function App() {
           <ChatPanel className="w-96 flex-shrink-0" cwd={cwd} planPath={planPath} />
         )}
       </div>
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </main>
   );
 }

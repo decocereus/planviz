@@ -116,6 +116,13 @@ export function createTaskShape(
   };
 }
 
+/** Arrow colors based on source node status */
+const ARROW_COLORS = {
+  pending: 'grey',
+  in_progress: 'yellow',
+  completed: 'green',
+} as const;
+
 /** Create a TLDraw arrow shape for a dependency edge */
 export function createDependencyArrow(
   edge: PlanEdge,
@@ -132,15 +139,21 @@ export function createDependencyArrow(
   const toX = (toLayout?.x ?? 50) + (toLayout?.width ?? DEFAULT_TASK_WIDTH) / 2;
   const toY = (toLayout?.y ?? 150) + (toLayout?.height ?? DEFAULT_TASK_HEIGHT) / 2;
 
+  // Arrow color and style based on dependency status
+  // - Dashed if dependency is not met (source not completed)
+  // - Solid if dependency is met (source completed)
+  const isDependencyMet = fromNode.status === 'completed';
+  const arrowColor = ARROW_COLORS[fromNode.status] ?? 'grey';
+
   return {
     id: toShapeId(edge.id),
     type: 'arrow',
     x: Math.min(fromX, toX),
     y: Math.min(fromY, toY),
     props: {
-      color: 'black',
+      color: arrowColor,
       fill: 'none',
-      dash: 'solid',
+      dash: isDependencyMet ? 'solid' : 'dashed',
       size: 's',
       arrowheadStart: 'none',
       arrowheadEnd: 'arrow',
@@ -163,6 +176,7 @@ export function createDependencyArrow(
       edgeId: edge.id,
       fromNodeId: edge.from,
       toNodeId: edge.to,
+      isDependencyMet,
     },
   };
 }

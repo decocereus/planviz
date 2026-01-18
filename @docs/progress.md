@@ -41,6 +41,10 @@
   - [x] t30: Build Terminal component with output display and input handling
   - [x] t31: Add resize handling via ResizeObserver with dynamic row/col calculation
   - [x] t32: Implement session lifecycle with start/stop/cleanup and exit handling
-- [ ] Phase 9 — Polish & UX
+- [x] Phase 9 — Polish & UX (completed 2026-01-18)
+  - [x] t33: Enhance dependency arrow styling (solid when met, dashed when pending)
+  - [x] t34: Add keyboard shortcuts (Cmd+O open, Cmd+J chat, Cmd+` terminal, Esc deselect)
+  - [x] t35: Create toast notification system with success/error/warning/info types
+  - [x] t36: Add loading skeletons and accessibility improvements (ARIA labels, semantic HTML)
 
 Notes will be appended here as phases complete.
