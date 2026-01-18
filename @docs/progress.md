@@ -19,8 +19,9 @@
   - [x] t13: Enable drag/resize/inline edit; debounce auto-save to layout
   - [x] t14: Quick actions: add task/phase, mark done/in-progress
   - [x] t15: Write-through to markdown and layout with minimal diffs
-- [ ] Phase 4 — File Watch & Sync
+- [x] Phase 4 — File Watch & Sync (completed 2026-01-18)
   - [x] t16: Add file watcher on plan.md and plan.layout.json emitting Tauri events
+  - [x] t17: Handle external changes with auto-reload by default; configurable setting to prompt instead; show conflict banner
 - [ ] Phase 5 — Chat Panel (Mock → Real)
 - [ ] Phase 6 — Agent Integration (Claude-first, then Codex/OpenCode)
 - [ ] Phase 7 — Agent Selector & Launch Modes

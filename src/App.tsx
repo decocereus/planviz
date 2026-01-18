@@ -5,6 +5,7 @@ import { readTextFile } from '@tauri-apps/plugin-fs';
 
 import { Button } from './components/ui/button';
 import { QuickActions } from './components/QuickActions';
+import { ConflictBanner } from './components/ConflictBanner';
 import { PlanCanvas } from './canvas';
 import { usePlanStore } from './store';
 import { parsePlan } from './parser';
@@ -143,20 +144,30 @@ export default function App() {
     addTask,
     isDirty,
     isSaving,
+    hasExternalChanges,
+    externalChangeType,
+    notifyExternalChange,
+    dismissExternalChanges,
+    reloadPlan,
+    reloadLayout,
   } = usePlanStore();
 
   const [isCanvasView, setIsCanvasView] = useState(false);
 
-  // Handle external file changes (implementation in t17)
-  const handleExternalPlanChange = useCallback((path: string) => {
-    console.log('External plan change detected:', path);
-    // Will be implemented in t17 - reload plan from file
-  }, []);
+  // Handle external file changes
+  const handleExternalPlanChange = useCallback(
+    (_path: string) => {
+      notifyExternalChange('plan');
+    },
+    [notifyExternalChange]
+  );
 
-  const handleExternalLayoutChange = useCallback((path: string) => {
-    console.log('External layout change detected:', path);
-    // Will be implemented in t17 - reload layout from file
-  }, []);
+  const handleExternalLayoutChange = useCallback(
+    (_path: string) => {
+      notifyExternalChange('layout');
+    },
+    [notifyExternalChange]
+  );
 
   // Set up file watcher
   useFileWatcher({
@@ -237,6 +248,15 @@ export default function App() {
     [addTask]
   );
 
+  // Handle conflict banner actions
+  const handleReloadFromBanner = useCallback(() => {
+    if (externalChangeType === 'plan') {
+      reloadPlan();
+    } else {
+      reloadLayout();
+    }
+  }, [externalChangeType, reloadPlan, reloadLayout]);
+
   // Get selected node info for QuickActions
   const selectedNode = plan?.nodes.find((n) => n.id === selectedNodeId);
 
@@ -252,6 +272,13 @@ export default function App() {
     <main className="h-screen flex flex-col bg-background">
       <CanvasHeader planPath={planPath} onClose={handleClose} isDirty={isDirty} isSaving={isSaving} />
       <div className="flex-1 relative">
+        {hasExternalChanges && externalChangeType && (
+          <ConflictBanner
+            changeType={externalChangeType}
+            onReload={handleReloadFromBanner}
+            onDismiss={dismissExternalChanges}
+          />
+        )}
         <PlanCanvas
           plan={plan}
           layouts={layouts}

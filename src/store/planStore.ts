@@ -4,10 +4,11 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import type { PlanDoc, LayoutMap, LayoutFile, PlanNode, Status } from '../types';
 import { debounce } from '../lib/utils';
 import { serializePlan, computePlanHash } from '../parser/serializer';
+import { parsePlan } from '../parser/parser';
 
 /** Debounce delay for auto-save (ms) */
 const AUTOSAVE_DELAY = 1000;
@@ -24,6 +25,12 @@ interface NodeInfo {
   phaseId: string | null;
 }
 
+/** Settings for reload behavior */
+export interface ReloadSettings {
+  /** Auto-reload on external changes (default: true) */
+  autoReload: boolean;
+}
+
 interface PlanState {
   // Current plan data
   planPath: string | null;
@@ -37,7 +44,12 @@ interface PlanState {
   isLoading: boolean;
   isSaving: boolean;
   isDirty: boolean;
+  hasExternalChanges: boolean;
+  externalChangeType: 'plan' | 'layout' | null;
   error: string | null;
+
+  // Settings
+  settings: ReloadSettings;
 
   // Actions
   setPlan: (plan: PlanDoc, planPath: string, planHash: string, title?: string) => void;
@@ -48,11 +60,16 @@ interface PlanState {
   deleteNode: (nodeId: string) => void;
   addTask: (phaseId: string, content: string) => void;
   clearPlan: () => void;
+  setSettings: (settings: Partial<ReloadSettings>) => void;
+  notifyExternalChange: (type: 'plan' | 'layout') => void;
+  dismissExternalChanges: () => void;
 
   // Async actions
   loadLayout: (planPath: string) => Promise<void>;
   saveLayout: () => Promise<void>;
   mergeLayout: (plan: PlanDoc, planPath: string, planHash: string, title?: string) => Promise<void>;
+  reloadPlan: () => Promise<void>;
+  reloadLayout: () => Promise<void>;
 }
 
 /** Convert PlanNode to NodeInfo for Rust API */
@@ -110,6 +127,11 @@ export const usePlanStore = create<PlanState>((set, get) => {
     plan: null,
     layouts: {},
     planHash: '',
+    hasExternalChanges: false,
+    externalChangeType: null,
+    settings: {
+      autoReload: true,
+    },
     selectedNodeId: null,
     isLoading: false,
     isSaving: false,
@@ -372,8 +394,41 @@ export const usePlanStore = create<PlanState>((set, get) => {
         planHash: '',
         selectedNodeId: null,
         isDirty: false,
+        hasExternalChanges: false,
+        externalChangeType: null,
         error: null,
       });
+    },
+
+    setSettings: (newSettings) => {
+      const { settings } = get();
+      set({ settings: { ...settings, ...newSettings } });
+    },
+
+    notifyExternalChange: (type) => {
+      const { settings, isSaving } = get();
+
+      // Ignore if we're currently saving (to avoid reacting to our own writes)
+      if (isSaving) {
+        console.log('Ignoring external change notification during save');
+        return;
+      }
+
+      if (settings.autoReload) {
+        // Auto-reload the changed file
+        if (type === 'plan') {
+          get().reloadPlan();
+        } else {
+          get().reloadLayout();
+        }
+      } else {
+        // Show conflict banner
+        set({ hasExternalChanges: true, externalChangeType: type });
+      }
+    },
+
+    dismissExternalChanges: () => {
+      set({ hasExternalChanges: false, externalChangeType: null });
     },
 
   // Async actions
@@ -461,6 +516,91 @@ export const usePlanStore = create<PlanState>((set, get) => {
           isLoading: false,
         });
       }
+    }
+  },
+
+  reloadPlan: async () => {
+    const { planPath } = get();
+    if (!planPath) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const content = await readTextFile(planPath);
+      const result = parsePlan(content);
+
+      if (!result.success) {
+        set({
+          error: `Failed to parse plan: ${result.errors.join(', ')}`,
+          isLoading: false,
+        });
+        return;
+      }
+
+      const newHash = computePlanHash(content);
+      const nodes = result.doc.nodes.map(toNodeInfo);
+
+      // Merge with existing layout to preserve positions
+      try {
+        const mergeResult = await invoke<MergeResult>('merge_layout', {
+          planPath,
+          nodes,
+          planHash: newHash,
+        });
+
+        set({
+          plan: result.doc,
+          planTitle: result.title,
+          planHash: newHash,
+          layouts: mergeResult.layout.layouts,
+          isLoading: false,
+          hasExternalChanges: false,
+          externalChangeType: null,
+          isDirty: false,
+        });
+
+        console.log('Plan reloaded from disk');
+      } catch {
+        // If merge fails, just update the plan without changing layouts
+        set({
+          plan: result.doc,
+          planTitle: result.title,
+          planHash: newHash,
+          isLoading: false,
+          hasExternalChanges: false,
+          externalChangeType: null,
+        });
+      }
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : String(err),
+        isLoading: false,
+      });
+    }
+  },
+
+  reloadLayout: async () => {
+    const { planPath } = get();
+    if (!planPath) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const layoutFile = await invoke<LayoutFile>('read_layout', { planPath });
+
+      set({
+        layouts: layoutFile.layouts,
+        planHash: layoutFile.planHash,
+        isLoading: false,
+        hasExternalChanges: false,
+        externalChangeType: null,
+        isDirty: false,
+      });
+
+      console.log('Layout reloaded from disk');
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : String(err),
+        isLoading: false,
+      });
     }
   },
   };
