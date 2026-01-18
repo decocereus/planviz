@@ -18,7 +18,9 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 notify = { version = "6", default-features = false, features = ["macos_fsevent"] }
 notify-debouncer-mini = "0.4"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "sync", "io-util", "rt"] }
+portable-pty = "0.8"
+dirs = "5"
 
 [dev-dependencies]
 tempfile = "3"

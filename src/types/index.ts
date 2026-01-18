@@ -93,3 +93,31 @@ export interface StreamEvent {
     content?: string;
   };
 }
+
+/** Agent types */
+export type AgentType = 'claude_code' | 'codex' | 'opencode';
+
+/** Agent session */
+export interface AgentSession {
+  id: string;
+  agentType: AgentType;
+  cwd: string;
+  connected: boolean;
+  status?: string;
+}
+
+/** Agent status event */
+export interface AgentStatusEvent {
+  sessionId: string;
+  connected: boolean;
+  message?: string;
+  error?: string;
+}
+
+/** Credential status */
+export interface CredentialStatus {
+  found: boolean;
+  source?: string;
+  cliAvailable: boolean;
+  error?: string;
+}

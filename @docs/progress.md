@@ -26,7 +26,11 @@
   - [x] t18: Build chat panel UI with message history, input, and streaming view
   - [x] t19: Implement mock ACP client in Rust with canned stream events
   - [x] t20: Wire plan update events from agent to plan.md and canvas refresh
-- [ ] Phase 6 — Agent Integration (Claude-first, then Codex/OpenCode)
+- [x] Phase 6 — Agent Integration (Claude-first, then Codex/OpenCode) (completed 2026-01-18)
+  - [x] t21: Implement PTY module in Rust for spawning Claude Code CLI
+  - [x] t22: Add credential discovery for Claude Code (file + Keychain)
+  - [x] t23: Create Claude Code adapter bridging PTY to stream events
+  - [x] t24: Add connection status, agent selector, and error handling in UI
 - [ ] Phase 7 — Agent Selector & Launch Modes
 - [ ] Phase 8 — Terminal Session Bridging
 - [ ] Phase 9 — Polish & UX

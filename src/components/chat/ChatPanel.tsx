@@ -3,30 +3,35 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { MessageSquare, Trash2, Wifi, WifiOff } from 'lucide-react';
+import { MessageSquare, Trash2, Bot } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { AgentSelector } from './AgentSelector';
 import {
   useChatStore,
   setupChatEventListener,
   teardownChatEventListener,
 } from '../../store/chatStore';
+import { useAgentStore } from '../../store/agentStore';
 
 interface ChatPanelProps {
   className?: string;
+  cwd?: string;
 }
 
-export function ChatPanel({ className }: ChatPanelProps) {
+export function ChatPanel({ className, cwd = '.' }: ChatPanelProps) {
   const {
     messages,
     isStreaming,
-    isConnected,
-    connectionError,
+    useRealAgent,
     sendMessage,
     clearMessages,
+    setUseRealAgent,
   } = useChatStore();
+
+  const { session } = useAgentStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -37,6 +42,11 @@ export function ChatPanel({ className }: ChatPanelProps) {
       teardownChatEventListener();
     };
   }, []);
+
+  // Update useRealAgent when session changes
+  useEffect(() => {
+    setUseRealAgent(session?.connected ?? false);
+  }, [session?.connected, setUseRealAgent]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -50,19 +60,18 @@ export function ChatPanel({ className }: ChatPanelProps) {
         <div className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-muted-foreground" />
           <span className="font-medium">Chat</span>
+          {useRealAgent && (
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+              Live
+            </span>
+          )}
+          {!useRealAgent && (
+            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+              Mock
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Connection status */}
-          <div
-            className="flex items-center gap-1"
-            title={connectionError ?? (isConnected ? 'Connected' : 'Disconnected')}
-          >
-            {isConnected ? (
-              <Wifi className="h-4 w-4 text-green-500" />
-            ) : (
-              <WifiOff className="h-4 w-4 text-muted-foreground" />
-            )}
-          </div>
           {/* Clear button */}
           {messages.length > 0 && (
             <Button
@@ -79,13 +88,18 @@ export function ChatPanel({ className }: ChatPanelProps) {
         </div>
       </div>
 
+      {/* Agent Selector */}
+      <AgentSelector cwd={cwd} />
+
       {/* Messages */}
       <ScrollArea className="flex-1">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <MessageSquare className="h-12 w-12 text-muted-foreground/50 mb-4" />
+            <Bot className="h-12 w-12 text-muted-foreground/50 mb-4" />
             <p className="text-sm text-muted-foreground">
-              No messages yet. Start a conversation with the AI assistant.
+              {useRealAgent
+                ? 'Connected to agent. Start a conversation.'
+                : 'Using mock mode. Connect to an agent for real responses.'}
             </p>
           </div>
         ) : (

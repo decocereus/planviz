@@ -23,12 +23,18 @@ interface ChatState {
   isConnected: boolean;
   connectionError: string | null;
 
+  // Mode
+  useRealAgent: boolean;
+
   // Actions
   sendMessage: (content: string) => Promise<void>;
+  sendMessageToAgent: (content: string) => Promise<void>;
   appendStreamContent: (content: string) => void;
   finalizeStream: () => void;
   clearMessages: () => void;
   setConnectionStatus: (connected: boolean, error?: string) => void;
+  setUseRealAgent: (useReal: boolean) => void;
+  startStreamingResponse: () => string;
 
   // Event handling
   handleStreamEvent: (event: StreamEvent) => void;
@@ -41,8 +47,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingMessageId: null,
   isConnected: false,
   connectionError: null,
+  useRealAgent: false,
 
   sendMessage: async (content: string) => {
+    const { isStreaming, useRealAgent } = get();
+    if (isStreaming) return;
+
+    // Route to appropriate handler
+    if (useRealAgent) {
+      await get().sendMessageToAgent(content);
+    } else {
+      // Use mock mode
+      const assistantMessageId = get().startStreamingResponse();
+
+      // Add user message first
+      const userMessage: ChatMessage = {
+        id: generateId(),
+        role: 'user',
+        content,
+        timestamp: Date.now(),
+      };
+
+      set((state) => ({
+        messages: [
+          ...state.messages.slice(0, -1), // Remove the placeholder
+          userMessage,
+          state.messages[state.messages.length - 1], // Put placeholder back
+        ],
+      }));
+
+      try {
+        // Invoke the mock chat command
+        await invoke('send_chat_message', { message: content });
+      } catch (err) {
+        // On error, update the assistant message with error
+        set((state) => ({
+          messages: state.messages.map((msg) =>
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+                  isStreaming: false,
+                }
+              : msg
+          ),
+          isStreaming: false,
+          streamingMessageId: null,
+        }));
+      }
+    }
+  },
+
+  sendMessageToAgent: async (content: string) => {
     const { isStreaming } = get();
     if (isStreaming) return;
 
@@ -71,8 +127,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      // Invoke the mock chat command
-      await invoke('send_chat_message', { message: content });
+      // Send to the real agent
+      await invoke('agent_send_message', { message: content });
     } catch (err) {
       // On error, update the assistant message with error
       set((state) => ({
@@ -89,6 +145,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamingMessageId: null,
       }));
     }
+  },
+
+  startStreamingResponse: () => {
+    const assistantMessageId = generateId();
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      isStreaming: true,
+    };
+
+    set((state) => ({
+      messages: [...state.messages, assistantMessage],
+      isStreaming: true,
+      streamingMessageId: assistantMessageId,
+    }));
+
+    return assistantMessageId;
   },
 
   appendStreamContent: (content: string) => {
@@ -128,6 +203,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isConnected: connected,
       connectionError: error ?? null,
     });
+  },
+
+  setUseRealAgent: (useReal) => {
+    set({ useRealAgent: useReal });
   },
 
   handleStreamEvent: (event: StreamEvent) => {
