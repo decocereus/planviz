@@ -17,6 +17,7 @@
 - [ ] Phase 3 — Canvas MVP
   - [x] t12: Render phases/tasks as tldraw shapes with dependency arrows
   - [x] t13: Enable drag/resize/inline edit; debounce auto-save to layout
+  - [x] t14: Quick actions: add task/phase, mark done/in-progress
 - [ ] Phase 4 — File Watch & Sync
 - [ ] Phase 5 — Chat Panel (Mock → Real)
 - [ ] Phase 6 — Agent Integration (Claude-first, then Codex/OpenCode)

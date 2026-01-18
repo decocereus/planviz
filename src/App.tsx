@@ -4,10 +4,11 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 
 import { Button } from './components/ui/button';
+import { QuickActions } from './components/QuickActions';
 import { PlanCanvas } from './canvas';
 import { usePlanStore } from './store';
 import { parsePlan } from './parser';
-import type { PlanDoc, LayoutMap } from './types';
+import type { PlanDoc, LayoutMap, Status } from './types';
 
 /** Simple hash function for plan content */
 function hashString(str: string): string {
@@ -136,6 +137,9 @@ export default function App() {
     mergeLayout,
     selectedNodeId,
     setSelectedNode,
+    updateNodeStatus,
+    deleteNode,
+    addTask,
     isDirty,
     isSaving,
   } = usePlanStore();
@@ -185,6 +189,35 @@ export default function App() {
     [updateLayoutsAndSave]
   );
 
+  const handleStatusChange = useCallback(
+    (nodeId: string, status: Status) => {
+      updateNodeStatus(nodeId, status);
+    },
+    [updateNodeStatus]
+  );
+
+  const handleDelete = useCallback(
+    (nodeId: string) => {
+      if (confirm('Are you sure you want to delete this item?')) {
+        deleteNode(nodeId);
+      }
+    },
+    [deleteNode]
+  );
+
+  const handleAddTask = useCallback(
+    (phaseId: string) => {
+      const content = prompt('Enter task description:');
+      if (content) {
+        addTask(phaseId, content);
+      }
+    },
+    [addTask]
+  );
+
+  // Get selected node info for QuickActions
+  const selectedNode = plan?.nodes.find((n) => n.id === selectedNodeId);
+
   if (!isCanvasView) {
     return (
       <main className="h-screen bg-gradient-to-br from-[#f7f8fb] via-[#eef1f8] to-[#e6ebf5]">
@@ -202,6 +235,14 @@ export default function App() {
           layouts={layouts}
           onLayoutChange={handleLayoutChange}
           onNodeSelect={setSelectedNode}
+        />
+        <QuickActions
+          selectedNodeId={selectedNodeId}
+          nodeType={selectedNode?.type ?? null}
+          currentStatus={selectedNode?.status ?? null}
+          onStatusChange={handleStatusChange}
+          onDelete={handleDelete}
+          onAddTask={handleAddTask}
         />
       </div>
     </main>

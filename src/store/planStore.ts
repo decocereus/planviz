@@ -4,7 +4,7 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import type { PlanDoc, LayoutMap, LayoutFile, PlanNode } from '../types';
+import type { PlanDoc, LayoutMap, LayoutFile, PlanNode, Status } from '../types';
 import { debounce } from '../lib/utils';
 
 /** Debounce delay for auto-save (ms) */
@@ -41,6 +41,9 @@ interface PlanState {
   setLayouts: (layouts: LayoutMap) => void;
   updateLayoutsAndSave: (layouts: LayoutMap) => void;
   setSelectedNode: (nodeId: string | null) => void;
+  updateNodeStatus: (nodeId: string, status: Status) => void;
+  deleteNode: (nodeId: string) => void;
+  addTask: (phaseId: string, content: string) => void;
   clearPlan: () => void;
 
   // Async actions
@@ -122,6 +125,206 @@ export const usePlanStore = create<PlanState>((set, get) => {
 
     setSelectedNode: (nodeId) => {
       set({ selectedNodeId: nodeId });
+    },
+
+    updateNodeStatus: (nodeId, status) => {
+      const { plan } = get();
+      if (!plan) return;
+
+      // Update the node status
+      const updatedNodes = plan.nodes.map((node) =>
+        node.id === nodeId ? { ...node, status } : node
+      );
+
+      // Update the task in phases
+      const updatedPhases = plan.phases.map((phase) => ({
+        ...phase,
+        tasks: phase.tasks.map((task) =>
+          task.id === nodeId ? { ...task, status } : task
+        ),
+      }));
+
+      // Recompute phase statuses based on their tasks
+      const phasesWithStatus = updatedPhases.map((phase) => {
+        const allCompleted = phase.tasks.every((t) => t.status === 'completed');
+        const anyInProgress = phase.tasks.some(
+          (t) => t.status === 'in_progress' || t.status === 'completed'
+        );
+        return phase;
+      });
+
+      // Update phase node statuses
+      const nodesWithPhaseStatus = updatedNodes.map((node) => {
+        if (node.type === 'phase') {
+          const phase = phasesWithStatus.find((p) => p.id === node.id);
+          if (phase && phase.tasks.length > 0) {
+            const allCompleted = phase.tasks.every((t) => t.status === 'completed');
+            const anyInProgress = phase.tasks.some(
+              (t) => t.status === 'in_progress' || t.status === 'completed'
+            );
+            return {
+              ...node,
+              status: allCompleted ? 'completed' : anyInProgress ? 'in_progress' : 'pending',
+            } as PlanNode;
+          }
+        }
+        return node;
+      });
+
+      set({
+        plan: {
+          ...plan,
+          phases: phasesWithStatus,
+          nodes: nodesWithPhaseStatus,
+        },
+        isDirty: true,
+      });
+    },
+
+    deleteNode: (nodeId) => {
+      const { plan, layouts } = get();
+      if (!plan) return;
+
+      // Find the node to delete
+      const nodeToDelete = plan.nodes.find((n) => n.id === nodeId);
+      if (!nodeToDelete) return;
+
+      // Remove node from nodes array
+      const updatedNodes = plan.nodes.filter((n) => n.id !== nodeId);
+
+      // Remove edges involving this node
+      const updatedEdges = plan.edges.filter(
+        (e) => e.from !== nodeId && e.to !== nodeId
+      );
+
+      // If it's a task, remove from phase
+      let updatedPhases = plan.phases;
+      if (nodeToDelete.type === 'task') {
+        updatedPhases = plan.phases.map((phase) => ({
+          ...phase,
+          tasks: phase.tasks.filter((t) => t.id !== nodeId),
+        }));
+      }
+
+      // If it's a phase, remove all its tasks too
+      if (nodeToDelete.type === 'phase') {
+        const taskIds = plan.nodes
+          .filter((n) => n.phaseId === nodeId)
+          .map((n) => n.id);
+
+        updatedPhases = plan.phases.filter((p) => p.id !== nodeId);
+        const remainingNodes = updatedNodes.filter(
+          (n) => n.id !== nodeId && !taskIds.includes(n.id)
+        );
+        const remainingEdges = updatedEdges.filter(
+          (e) => !taskIds.includes(e.from) && !taskIds.includes(e.to)
+        );
+
+        // Remove layouts for deleted nodes
+        const updatedLayouts = { ...layouts };
+        delete updatedLayouts[nodeId];
+        taskIds.forEach((id) => delete updatedLayouts[id]);
+
+        set({
+          plan: {
+            ...plan,
+            phases: updatedPhases,
+            nodes: remainingNodes,
+            edges: remainingEdges,
+          },
+          layouts: updatedLayouts,
+          selectedNodeId: null,
+          isDirty: true,
+        });
+        return;
+      }
+
+      // Remove layout for deleted node
+      const updatedLayouts = { ...layouts };
+      delete updatedLayouts[nodeId];
+
+      set({
+        plan: {
+          ...plan,
+          phases: updatedPhases,
+          nodes: updatedNodes,
+          edges: updatedEdges,
+        },
+        layouts: updatedLayouts,
+        selectedNodeId: null,
+        isDirty: true,
+      });
+    },
+
+    addTask: (phaseId, content) => {
+      const { plan, layouts } = get();
+      if (!plan) return;
+
+      // Generate a new task ID
+      const existingIds = plan.nodes.map((n) => n.id);
+      let newId = 't1';
+      let counter = 1;
+      while (existingIds.includes(newId)) {
+        counter++;
+        newId = `t${counter}`;
+      }
+
+      // Find the phase
+      const phaseIndex = plan.phases.findIndex((p) => p.id === phaseId);
+      if (phaseIndex === -1) return;
+
+      // Create new task
+      const newTask = {
+        id: newId,
+        content,
+        status: 'pending' as Status,
+      };
+
+      // Create new node
+      const newNode: PlanNode = {
+        id: newId,
+        type: 'task',
+        label: content,
+        status: 'pending',
+        phaseId,
+      };
+
+      // Calculate position for new task
+      const phaseLayout = layouts[phaseId];
+      const tasksInPhase = plan.nodes.filter(
+        (n) => n.type === 'task' && n.phaseId === phaseId
+      );
+      const taskCount = tasksInPhase.length;
+      const col = taskCount % 3;
+      const row = Math.floor(taskCount / 3);
+
+      const newLayout = {
+        x: (phaseLayout?.x ?? 50) + col * 320,
+        y: (phaseLayout?.y ?? 50) + 50 + 100 + row * 100,
+        width: 280,
+        height: 80,
+      };
+
+      // Update phases
+      const updatedPhases = [...plan.phases];
+      updatedPhases[phaseIndex] = {
+        ...updatedPhases[phaseIndex],
+        tasks: [...updatedPhases[phaseIndex].tasks, newTask],
+      };
+
+      set({
+        plan: {
+          ...plan,
+          phases: updatedPhases,
+          nodes: [...plan.nodes, newNode],
+        },
+        layouts: {
+          ...layouts,
+          [newId]: newLayout,
+        },
+        selectedNodeId: newId,
+        isDirty: true,
+      });
     },
 
     clearPlan: () => {
