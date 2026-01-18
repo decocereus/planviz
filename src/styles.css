@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 16% 97%;
+  --foreground: 222 47% 10%;
+  --primary: 234 89% 68%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 16% 90%;
+  --secondary-foreground: 222 47% 12%;
+  --muted: 210 20% 92%;
+  --muted-foreground: 222 27% 30%;
+  --accent: 18 100% 63%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --border-strong: 222 30% 70%;
+  --input: 214 32% 91%;
+  --ring: 234 89% 68%;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-family: "Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.glass-card {
+  @apply rounded-2xl border border-border bg-white/60 shadow-sm backdrop-blur-lg;
+}
+
+.grid-smooth {
+  background-image: radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.06) 1px, transparent 0);
+  background-size: 28px 28px;
+}

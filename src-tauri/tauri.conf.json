@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Plan Visualizer",
+  "version": "0.0.0",
+  "identifier": "com.planviz.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist",
+    "devPath": "http://localhost:5173"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Plan Visualizer",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ]
+  }
+}
