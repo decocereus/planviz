@@ -20,6 +20,7 @@
   - [x] t14: Quick actions: add task/phase, mark done/in-progress
   - [x] t15: Write-through to markdown and layout with minimal diffs
 - [ ] Phase 4 — File Watch & Sync
+  - [x] t16: Add file watcher on plan.md and plan.layout.json emitting Tauri events
 - [ ] Phase 5 — Chat Panel (Mock → Real)
 - [ ] Phase 6 — Agent Integration (Claude-first, then Codex/OpenCode)
 - [ ] Phase 7 — Agent Selector & Launch Modes

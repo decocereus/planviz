@@ -8,6 +8,7 @@ import { QuickActions } from './components/QuickActions';
 import { PlanCanvas } from './canvas';
 import { usePlanStore } from './store';
 import { parsePlan } from './parser';
+import { useFileWatcher, startWatching, stopWatching } from './hooks';
 import type { PlanDoc, LayoutMap, Status } from './types';
 
 /** Simple hash function for plan content */
@@ -146,6 +147,24 @@ export default function App() {
 
   const [isCanvasView, setIsCanvasView] = useState(false);
 
+  // Handle external file changes (implementation in t17)
+  const handleExternalPlanChange = useCallback((path: string) => {
+    console.log('External plan change detected:', path);
+    // Will be implemented in t17 - reload plan from file
+  }, []);
+
+  const handleExternalLayoutChange = useCallback((path: string) => {
+    console.log('External layout change detected:', path);
+    // Will be implemented in t17 - reload layout from file
+  }, []);
+
+  // Set up file watcher
+  useFileWatcher({
+    onPlanChange: handleExternalPlanChange,
+    onLayoutChange: handleExternalLayoutChange,
+    enabled: isCanvasView && !!planPath,
+  });
+
   const handleOpenPlan = useCallback(async () => {
     try {
       const selected = await open({
@@ -160,6 +179,8 @@ export default function App() {
         if (result.success) {
           const hash = hashString(content);
           await mergeLayout(result.doc, selected, hash, result.title);
+          // Start watching for external file changes
+          await startWatching(selected);
           setIsCanvasView(true);
         } else {
           console.error('Parse errors:', result.errors);
@@ -177,7 +198,8 @@ export default function App() {
     setIsCanvasView(true);
   }, [setPlan, setLayouts]);
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
+    await stopWatching();
     clearPlan();
     setIsCanvasView(false);
   }, [clearPlan]);
